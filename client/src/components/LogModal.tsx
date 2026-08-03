@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Feeling } from '../types';
+import CatMascot from './CatMascot';
 
 interface LogModalProps {
   open: boolean;
+  task: string;
   onClose: () => void;
   onSave: (data: { feeling: Feeling; text: string }) => void;
 }
@@ -14,7 +16,7 @@ const FEELINGS: { key: Feeling; label: string }[] = [
   { key: 'strained', label: '🔴 Strained' },
 ];
 
-export default function LogModal({ open, onClose, onSave }: LogModalProps) {
+export default function LogModal({ open, task, onClose, onSave }: LogModalProps) {
   const [feeling, setFeeling] = useState<Feeling | null>(null);
   const [text, setText] = useState('');
   const [shake, setShake] = useState(false);
@@ -24,7 +26,6 @@ export default function LogModal({ open, onClose, onSave }: LogModalProps) {
     if (open) {
       setFeeling(null);
       setText('');
-      setTimeout(() => textareaRef.current?.focus(), 0);
     }
   }, [open]);
 
@@ -51,8 +52,21 @@ export default function LogModal({ open, onClose, onSave }: LogModalProps) {
   return (
     <div className="modal-overlay show" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal">
-        <h3>Log this session</h3>
-        <p className="hint">How your eyes feel, and what you learned — takes 20 seconds.</p>
+        <div className="modal-title-row">
+          <CatMascot mood="happy" size={40} />
+          <div>
+            <h3>How are your eyes?</h3>
+            <p className="hint">Takes 10 seconds — this is just about how you feel, not what you did.</p>
+          </div>
+        </div>
+
+        {task && (
+          <div className="modal-task-recap">
+            <span className="modal-task-recap-label">You were focusing on</span>
+            <span className="modal-task-recap-text">{task}</span>
+          </div>
+        )}
+
         <div className="feeling-picker" style={{ outline: shake ? '2px solid var(--near)' : 'none' }}>
           {FEELINGS.map((f) => (
             <button
@@ -68,7 +82,7 @@ export default function LogModal({ open, onClose, onSave }: LogModalProps) {
         </div>
         <textarea
           ref={textareaRef}
-          placeholder="What did you work on or learn this session?"
+          placeholder="Anything else on your mind? (optional)"
           value={text}
           onChange={(e) => setText(e.target.value)}
         />

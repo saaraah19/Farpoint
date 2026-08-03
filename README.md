@@ -1,8 +1,20 @@
-# Farpoint
+# Farpoint 🐾
 
-A 20-20-20 pomodoro timer, guided convergence (pencil pushup) drill, hydration
-and eye-drop reminders, and a session journal — built for long screen sessions
-with exophoria and high myopia.
+A cat-themed 20-20-20 pomodoro timer, guided convergence (pencil pushup)
+drill, hydration and eye-drop reminders, an hours→sessions planner, and a
+session journal — built for long screen sessions with exophoria and high
+myopia.
+
+- **Set your intention, not just your mood** — a task chip above the timer
+  captures what you're working on when you start; the end-of-session
+  check-in only asks how your eyes feel, so the two never get mixed up.
+- **Plan today's sessions** — tell it how many hours you have and it splits
+  them into focus sessions of your chosen length (or set the session count
+  directly).
+- **Eye pushups** — the convergence drill tracks 20 reps × 2 sessions/day
+  with a paw-print progress trail.
+- **Sound cues** — a soft chime or a synthesized meow (your choice) on every
+  phase change, plus a little paw-print celebration when you hit a goal.
 
 - **Frontend:** React + TypeScript + Vite (no UI framework — hand-written CSS)
 - **Backend:** Node.js + Express + SQLite (`better-sqlite3`), single user, no auth
@@ -98,8 +110,17 @@ All endpoints are under `/api` and operate on a single user (no accounts).
 | DELETE | `/api/history/:id`          | Remove an entry                      |
 | GET    | `/api/reminder-settings`    | Hydration/eye-drop reminder settings |
 | PUT    | `/api/reminder-settings`    | Update reminder settings             |
-| GET    | `/api/pomodoro-settings`    | Timer settings                       |
+| GET    | `/api/pomodoro-settings`    | Timer settings (incl. `soundStyle`: chime/meow) |
 | PUT    | `/api/pomodoro-settings`    | Update timer settings                |
+
+`GET/PUT /api/daily` also carries `currentTask` (the task chip above the
+timer) and `targetSessions` (today's planned session count from the planner
+card) alongside the existing counts. `POST /api/history` accepts an optional
+`task` field so each log entry can show what you were focused on.
+
+Existing SQLite databases from before these fields existed are migrated
+automatically the next time the server starts (see `ensureColumn` in
+`server/db.js`) — no manual migration step needed.
 
 ## Notes
 

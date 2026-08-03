@@ -25,6 +25,8 @@ function rowToDaily(row, date) {
     drillSessionsToday: row?.drill_sessions_today ?? 0,
     hydrationCount: row?.hydration_count ?? 0,
     dropsCount: row?.drops_count ?? 0,
+    currentTask: row?.current_task ?? '',
+    targetSessions: row?.target_sessions ?? 0,
   };
 }
 
@@ -44,15 +46,19 @@ app.put('/api/daily', (req, res) => {
     drillSessionsToday: req.body.drillSessionsToday ?? current.drillSessionsToday,
     hydrationCount: req.body.hydrationCount ?? current.hydrationCount,
     dropsCount: req.body.dropsCount ?? current.dropsCount,
+    currentTask: req.body.currentTask ?? current.currentTask,
+    targetSessions: req.body.targetSessions ?? current.targetSessions,
   };
   db.prepare(`
-    INSERT INTO daily_stats (date, cycles_today, drill_sessions_today, hydration_count, drops_count)
-    VALUES (@date, @cyclesToday, @drillSessionsToday, @hydrationCount, @dropsCount)
+    INSERT INTO daily_stats (date, cycles_today, drill_sessions_today, hydration_count, drops_count, current_task, target_sessions)
+    VALUES (@date, @cyclesToday, @drillSessionsToday, @hydrationCount, @dropsCount, @currentTask, @targetSessions)
     ON CONFLICT(date) DO UPDATE SET
       cycles_today = @cyclesToday,
       drill_sessions_today = @drillSessionsToday,
       hydration_count = @hydrationCount,
-      drops_count = @dropsCount
+      drops_count = @dropsCount,
+      current_task = @currentTask,
+      target_sessions = @targetSessions
   `).run({ date, ...next });
   res.json({ date, ...next });
 });
@@ -61,25 +67,26 @@ app.put('/api/daily', (req, res) => {
 app.get('/api/history', (req, res) => {
   const rows = db.prepare('SELECT * FROM history ORDER BY ts DESC').all();
   res.json(rows.map(r => ({
-    id: r.id, ts: r.ts, feeling: r.feeling, text: r.text,
+    id: r.id, ts: r.ts, feeling: r.feeling, text: r.text, task: r.task,
     cycles: r.cycles, drillSessions: r.drill_sessions,
   })));
 });
 
 app.post('/api/history', (req, res) => {
-  const { feeling, text, cycles, drillSessions } = req.body;
+  const { feeling, text, task, cycles, drillSessions } = req.body;
   if (!feeling) return res.status(400).json({ error: 'feeling is required' });
   const entry = {
     id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
     ts: Date.now(),
     feeling,
     text: text || '',
+    task: task || '',
     cycles: cycles || 0,
     drillSessions: drillSessions || 0,
   };
   db.prepare(`
-    INSERT INTO history (id, ts, feeling, text, cycles, drill_sessions)
-    VALUES (@id, @ts, @feeling, @text, @cycles, @drillSessions)
+    INSERT INTO history (id, ts, feeling, text, task, cycles, drill_sessions)
+    VALUES (@id, @ts, @feeling, @text, @task, @cycles, @drillSessions)
   `).run(entry);
   res.status(201).json(entry);
 });
@@ -127,18 +134,20 @@ app.get('/api/pomodoro-settings', (req, res) => {
     cyclesBeforeLong: row.cycles_before_long,
     longBreakMin: row.long_break_min,
     soundEnabled: !!row.sound_enabled,
+    soundStyle: row.sound_style || 'chime',
   });
 });
 
 app.put('/api/pomodoro-settings', (req, res) => {
-  const { workMin, breakSec, cyclesBeforeLong, longBreakMin, soundEnabled } = req.body;
+  const { workMin, breakSec, cyclesBeforeLong, longBreakMin, soundEnabled, soundStyle } = req.body;
   db.prepare(`
     UPDATE pomodoro_settings SET
       work_min = @workMin,
       break_sec = @breakSec,
       cycles_before_long = @cyclesBeforeLong,
       long_break_min = @longBreakMin,
-      sound_enabled = @soundEnabled
+      sound_enabled = @soundEnabled,
+      sound_style = @soundStyle
     WHERE id = 1
   `).run({
     workMin: workMin || 20,
@@ -146,6 +155,7 @@ app.put('/api/pomodoro-settings', (req, res) => {
     cyclesBeforeLong: cyclesBeforeLong || 3,
     longBreakMin: longBreakMin || 5,
     soundEnabled: soundEnabled ? 1 : 0,
+    soundStyle: soundStyle === 'meow' ? 'meow' : 'chime',
   });
   res.json(req.body);
 });

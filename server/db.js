@@ -19,7 +19,9 @@ db.exec(`
     cycles_today INTEGER NOT NULL DEFAULT 0,
     drill_sessions_today INTEGER NOT NULL DEFAULT 0,
     hydration_count INTEGER NOT NULL DEFAULT 0,
-    drops_count INTEGER NOT NULL DEFAULT 0
+    drops_count INTEGER NOT NULL DEFAULT 0,
+    current_task TEXT NOT NULL DEFAULT '',
+    target_sessions INTEGER NOT NULL DEFAULT 0
   );
 
   CREATE TABLE IF NOT EXISTS history (
@@ -27,6 +29,7 @@ db.exec(`
     ts INTEGER NOT NULL,
     feeling TEXT NOT NULL,
     text TEXT NOT NULL DEFAULT '',
+    task TEXT NOT NULL DEFAULT '',
     cycles INTEGER NOT NULL DEFAULT 0,
     drill_sessions INTEGER NOT NULL DEFAULT 0
   );
@@ -45,9 +48,25 @@ db.exec(`
     break_sec INTEGER NOT NULL DEFAULT 20,
     cycles_before_long INTEGER NOT NULL DEFAULT 3,
     long_break_min INTEGER NOT NULL DEFAULT 5,
-    sound_enabled INTEGER NOT NULL DEFAULT 1
+    sound_enabled INTEGER NOT NULL DEFAULT 1,
+    sound_style TEXT NOT NULL DEFAULT 'chime'
   );
 `);
+
+// Lightweight migration: add columns that older databases (created before
+// these features existed) won't have yet. CREATE TABLE IF NOT EXISTS above
+// only helps brand-new databases, so existing farpoint.db files on disk
+// (e.g. on a Render deploy) need these ALTERs to catch up.
+function ensureColumn(table, column, ddl) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+  if (!cols.includes(column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+  }
+}
+ensureColumn('daily_stats', 'current_task', `current_task TEXT NOT NULL DEFAULT ''`);
+ensureColumn('daily_stats', 'target_sessions', `target_sessions INTEGER NOT NULL DEFAULT 0`);
+ensureColumn('history', 'task', `task TEXT NOT NULL DEFAULT ''`);
+ensureColumn('pomodoro_settings', 'sound_style', `sound_style TEXT NOT NULL DEFAULT 'chime'`);
 
 // Seed singleton settings rows if empty.
 db.prepare(`INSERT OR IGNORE INTO reminder_settings (id) VALUES (1)`).run();

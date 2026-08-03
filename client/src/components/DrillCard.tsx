@@ -1,4 +1,5 @@
 import { useDrill, DRILL_GOAL_REPS, DRILL_GOAL_SESSIONS } from '../hooks/useDrill';
+import CatMascot from './CatMascot';
 
 interface DrillCardProps {
   drillSessionsToday: number;
@@ -8,7 +9,6 @@ interface DrillCardProps {
 export default function DrillCard({ drillSessionsToday, onSessionComplete }: DrillCardProps) {
   const { running, reps, dotAt, justCompleted, start, stop } = useDrill({ onSessionComplete });
 
-  const progressPct = Math.min(100, (reps / DRILL_GOAL_REPS) * 100);
   const sessionsDone = Math.min(drillSessionsToday, DRILL_GOAL_SESSIONS);
 
   let instruction = "Hold a pencil or your thumb at arm's length. Press start, then follow the dot with your eyes only — don't turn your head.";
@@ -18,21 +18,25 @@ export default function DrillCard({ drillSessionsToday, onSessionComplete }: Dri
       : "Bring your focus back to the near point. If it doubles, pause and try to merge it into one before continuing.";
   } else if (justCompleted) {
     instruction = `Session complete — ${DRILL_GOAL_REPS} reps done. ` +
-      (sessionsDone >= DRILL_GOAL_SESSIONS ? 'Both sessions done for today, nice work.' : 'One more session later today to hit your goal.');
+      (sessionsDone >= DRILL_GOAL_SESSIONS ? 'Both sessions done for today, nice work! 🐾' : 'One more session later today to hit your goal.');
   }
 
   return (
     <div className="card">
-      <div className="drill-header"><h2>Convergence drill</h2></div>
+      <div className="drill-header">
+        <h2>Eye pushups</h2>
+        <CatMascot mood={running ? 'focus' : justCompleted ? 'happy' : 'idle'} size={40} />
+      </div>
       <p className="drill-goal">
         Goal: {DRILL_GOAL_REPS} reps per session · {DRILL_GOAL_SESSIONS} sessions/day — {sessionsDone}/{DRILL_GOAL_SESSIONS} done today
       </p>
-      <div className="drill-progress-bar">
-        <div
-          className="drill-progress-fill"
-          style={{ width: `${progressPct}%`, background: justCompleted ? 'var(--far)' : 'var(--near)' }}
-        />
+
+      <div className="paw-track" aria-label={`${reps} of ${DRILL_GOAL_REPS} reps`}>
+        {Array.from({ length: DRILL_GOAL_REPS }, (_, i) => (
+          <span key={i} className={`paw-dot ${i < reps ? 'filled' : ''}`}>🐾</span>
+        ))}
       </div>
+
       <div className="drill-stage">
         <div className="drill-track" />
         <div

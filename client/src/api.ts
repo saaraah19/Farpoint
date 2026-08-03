@@ -16,7 +16,7 @@ export const api = {
     request<DailyStats>('/api/daily', { method: 'PUT', body: JSON.stringify(patch) }),
 
   getHistory: () => request<HistoryEntry[]>('/api/history'),
-  addHistory: (entry: Pick<HistoryEntry, 'feeling' | 'text' | 'cycles' | 'drillSessions'>) =>
+  addHistory: (entry: Pick<HistoryEntry, 'feeling' | 'text' | 'task' | 'cycles' | 'drillSessions'>) =>
     request<HistoryEntry>('/api/history', { method: 'POST', body: JSON.stringify(entry) }),
   deleteHistory: (id: string) =>
     request<void>(`/api/history/${id}`, { method: 'DELETE' }),

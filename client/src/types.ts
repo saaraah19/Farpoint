@@ -1,5 +1,6 @@
 export type Phase = 'work' | 'break' | 'long';
 export type Feeling = 'great' | 'okay' | 'tired' | 'strained';
+export type SoundStyle = 'chime' | 'meow';
 
 export interface DailyStats {
   date: string;
@@ -7,6 +8,8 @@ export interface DailyStats {
   drillSessionsToday: number;
   hydrationCount: number;
   dropsCount: number;
+  currentTask: string;
+  targetSessions: number;
 }
 
 export interface HistoryEntry {
@@ -14,6 +17,7 @@ export interface HistoryEntry {
   ts: number;
   feeling: Feeling;
   text: string;
+  task: string;
   cycles: number;
   drillSessions: number;
 }
@@ -31,4 +35,5 @@ export interface PomodoroSettings {
   cyclesBeforeLong: number;
   longBreakMin: number;
   soundEnabled: boolean;
+  soundStyle: SoundStyle;
 }

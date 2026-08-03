@@ -8,6 +8,8 @@ const EMPTY: DailyStats = {
   drillSessionsToday: 0,
   hydrationCount: 0,
   dropsCount: 0,
+  currentTask: '',
+  targetSessions: 0,
 };
 
 export function useDailyStats() {

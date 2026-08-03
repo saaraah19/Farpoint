@@ -34,6 +34,7 @@ export default function HistoryCard({ entries, onNewEntry, onDelete }: HistoryCa
                   <span className="history-date">{dateStr}</span>
                   <span className={`feeling-chip feeling-${entry.feeling}`}>{FEELING_LABEL[entry.feeling]}</span>
                 </div>
+                {entry.task && <p className="history-task">🐾 {entry.task}</p>}
                 {entry.text && <p className="history-text">{entry.text}</p>}
                 <div className="history-meta">
                   <span>{entry.cycles} cycles · {entry.drillSessions} drill sessions that day</span>

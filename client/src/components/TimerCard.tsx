@@ -1,12 +1,14 @@
 import type { Phase, PomodoroSettings } from '../types';
 import { fmtClock } from '../utils';
+import CatMascot from './CatMascot';
+import type { CatMood } from './CatMascot';
 
 const RING_CIRC = 628;
 
-const PHASE_META: Record<Phase, { label: string; color: string; hint: string }> = {
-  work: { label: 'Focus', color: 'var(--near)', hint: 'Work session running. When it ends, look at something 20+ feet away.' },
-  break: { label: 'Look away', color: 'var(--far)', hint: 'Look at something 20+ feet away. Let your eyes relax fully — no screen.' },
-  long: { label: 'Long break', color: 'var(--amber)', hint: 'Longer break. Stand up, walk around, get your eyes off near focus entirely.' },
+const PHASE_META: Record<Phase, { label: string; color: string; hint: string; mood: CatMood }> = {
+  work: { label: 'Focus', color: 'var(--near)', hint: 'Work session running. When it ends, look at something 20+ feet away.', mood: 'focus' },
+  break: { label: 'Look away', color: 'var(--far)', hint: 'Look at something 20+ feet away. Let your eyes relax fully — no screen.', mood: 'rest' },
+  long: { label: 'Long break', color: 'var(--amber)', hint: 'Longer break. Stand up, walk around, get your eyes off near focus entirely.', mood: 'sleepy' },
 };
 
 interface TimerCardProps {
@@ -16,6 +18,7 @@ interface TimerCardProps {
   running: boolean;
   cycle: number;
   cyclesToday: number;
+  targetSessions: number;
   onToggle: () => void;
   onSkip: () => void;
   onReset: () => void;
@@ -23,14 +26,16 @@ interface TimerCardProps {
 }
 
 export default function TimerCard({
-  phase, remaining, fraction, running, cycle, cyclesToday, onToggle, onSkip, onReset, onLogSession,
+  phase, remaining, fraction, running, cycle, cyclesToday, targetSessions, onToggle, onSkip, onReset, onLogSession,
 }: TimerCardProps) {
   const meta = PHASE_META[phase];
   const dashoffset = RING_CIRC * (1 - fraction);
+  const mood: CatMood = running ? meta.mood : 'idle';
 
   return (
     <div className="card">
       <div className="timer-wrap">
+        <CatMascot mood={mood} size={56} className="timer-cat" />
         <div className="ring-box">
           <svg viewBox="0 0 220 220">
             <circle className="ring-track" cx="110" cy="110" r="100" />
@@ -61,7 +66,10 @@ export default function TimerCard({
         )}
         <div className="meta-row">
           <span>Cycle {cycle}</span>
-          <span>{cyclesToday} {cyclesToday === 1 ? 'cycle' : 'cycles'} today</span>
+          <span>
+            {cyclesToday} {cyclesToday === 1 ? 'session' : 'sessions'} today
+            {targetSessions > 0 ? ` · goal ${Math.min(cyclesToday, targetSessions)}/${targetSessions}` : ''}
+          </span>
         </div>
       </div>
     </div>
@@ -102,6 +110,25 @@ export function TimingSettings({ settings, onChange }: TimingSettingsProps) {
           <span>Sound cue</span>
           <input type="checkbox" style={{ width: 'auto' }} checked={settings.soundEnabled}
             onChange={(e) => onChange({ soundEnabled: e.target.checked })} />
+        </div>
+        <div className="field-row">
+          <span>Sound style</span>
+          <div className="sound-style-picker">
+            <button
+              type="button"
+              className={`chip ${settings.soundStyle === 'chime' ? 'active' : ''}`}
+              onClick={() => onChange({ soundStyle: 'chime' })}
+            >
+              🔔 Chime
+            </button>
+            <button
+              type="button"
+              className={`chip ${settings.soundStyle === 'meow' ? 'active' : ''}`}
+              onClick={() => onChange({ soundStyle: 'meow' })}
+            >
+              🐱 Meow
+            </button>
+          </div>
         </div>
       </div>
     </details>

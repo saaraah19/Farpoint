@@ -9,7 +9,7 @@ export function useHistory() {
     api.getHistory().then(setEntries).catch(() => setEntries([]));
   }, []);
 
-  const addEntry = useCallback(async (data: { feeling: Feeling; text: string; cycles: number; drillSessions: number }) => {
+  const addEntry = useCallback(async (data: { feeling: Feeling; text: string; task: string; cycles: number; drillSessions: number }) => {
     const entry = await api.addHistory(data);
     setEntries((prev) => [entry, ...prev]);
   }, []);

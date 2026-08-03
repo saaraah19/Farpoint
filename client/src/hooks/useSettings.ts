@@ -15,6 +15,7 @@ const DEFAULT_POMODORO: PomodoroSettings = {
   cyclesBeforeLong: 3,
   longBreakMin: 5,
   soundEnabled: true,
+  soundStyle: 'chime',
 };
 
 export function useReminderSettings() {

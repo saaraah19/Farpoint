@@ -1,24 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Phase, PomodoroSettings } from '../types';
-
-function beep(freq: number) {
-  try {
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.value = freq;
-    gain.gain.setValueAtTime(0.001, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.15, ctx.currentTime + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.5);
-  } catch {
-    // audio unavailable, ignore
-  }
-}
+import { playPhaseSound } from '../sound';
 
 function phaseSeconds(phase: Phase, settings: PomodoroSettings): number {
   if (phase === 'work') return settings.workMin * 60;
@@ -52,13 +34,13 @@ export function usePomodoro({ settings, onWorkComplete }: UsePomodoroOptions) {
     setPhase((prevPhase) => {
       const s = settingsRef.current;
       if (prevPhase === 'work') {
-        beep(s.soundEnabled ? 660 : 0);
+        if (s.soundEnabled) playPhaseSound(s.soundStyle, true);
         onWorkCompleteRef.current();
         const nextPhase: Phase = cycle % s.cyclesBeforeLong === 0 ? 'long' : 'break';
         setRemaining(phaseSeconds(nextPhase, s));
         return nextPhase;
       } else {
-        beep(s.soundEnabled ? 520 : 0);
+        if (s.soundEnabled) playPhaseSound(s.soundStyle, false);
         setCycle((c) => c + 1);
         setRemaining(phaseSeconds('work', s));
         return 'work';
