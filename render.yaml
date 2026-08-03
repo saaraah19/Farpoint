@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: farpoint
+    runtime: node
+    plan: free
+    buildCommand: npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DB_PATH
+        value: /var/data/farpoint.db
+    disk:
+      name: farpoint-data
+      mountPath: /var/data
+      sizeGB: 1
