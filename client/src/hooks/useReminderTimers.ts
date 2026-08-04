@@ -39,6 +39,8 @@ export function useReminderTimers({ settings, notificationsEnabled, onHydrationD
   settingsRef.current = settings;
   const notificationsEnabledRef = useRef(notificationsEnabled);
   notificationsEnabledRef.current = notificationsEnabled;
+  const toastKindRef = useRef(toastKind);
+  toastKindRef.current = toastKind;
   const initedRef = useRef(false);
 
   // Only resync remaining time from settings once on load (or when minutes change while idle).
@@ -66,34 +68,26 @@ export function useReminderTimers({ settings, notificationsEnabled, onHydrationD
     if (autoHideRef.current) clearTimeout(autoHideRef.current);
   }, []);
 
+  // Plain, pure countdown — one decrement per second, no side effects here.
+  // Paused (both timers) while a toast is currently showing, same as before.
   useEffect(() => {
     const id = setInterval(() => {
+      if (toastKindRef.current) return;
       const s = settingsRef.current;
-      setToastKind((currentToast) => {
-        if (currentToast) return currentToast; // don't tick down while a toast is showing
-        if (s.hydrationEnabled) {
-          setHydrationRemaining((r) => {
-            if (r <= 1) {
-              showToast('hydration');
-              return 0;
-            }
-            return r - 1;
-          });
-        }
-        if (s.dropsEnabled) {
-          setDropsRemaining((r) => {
-            if (r <= 1) {
-              showToast('drops');
-              return 0;
-            }
-            return r - 1;
-          });
-        }
-        return currentToast;
-      });
+      if (s.hydrationEnabled) setHydrationRemaining((r) => Math.max(0, r - 1));
+      if (s.dropsEnabled) setDropsRemaining((r) => Math.max(0, r - 1));
     }, 1000);
     return () => clearInterval(id);
-  }, [showToast]);
+  }, []);
+
+  // Side effects: fire exactly once, when a timer actually reaches zero.
+  useEffect(() => {
+    if (hydrationRemaining <= 0 && !toastKindRef.current) showToast('hydration');
+  }, [hydrationRemaining, showToast]);
+
+  useEffect(() => {
+    if (dropsRemaining <= 0 && !toastKindRef.current) showToast('drops');
+  }, [dropsRemaining, showToast]);
 
   const markDone = useCallback(() => {
     if (toastKind === 'hydration') {
