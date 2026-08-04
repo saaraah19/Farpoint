@@ -135,11 +135,12 @@ app.get('/api/pomodoro-settings', (req, res) => {
     longBreakMin: row.long_break_min,
     soundEnabled: !!row.sound_enabled,
     soundStyle: row.sound_style || 'chime',
+    notificationsEnabled: !!row.notifications_enabled,
   });
 });
 
 app.put('/api/pomodoro-settings', (req, res) => {
-  const { workMin, breakSec, cyclesBeforeLong, longBreakMin, soundEnabled, soundStyle } = req.body;
+  const { workMin, breakSec, cyclesBeforeLong, longBreakMin, soundEnabled, soundStyle, notificationsEnabled } = req.body;
   db.prepare(`
     UPDATE pomodoro_settings SET
       work_min = @workMin,
@@ -147,7 +148,8 @@ app.put('/api/pomodoro-settings', (req, res) => {
       cycles_before_long = @cyclesBeforeLong,
       long_break_min = @longBreakMin,
       sound_enabled = @soundEnabled,
-      sound_style = @soundStyle
+      sound_style = @soundStyle,
+      notifications_enabled = @notificationsEnabled
     WHERE id = 1
   `).run({
     workMin: workMin || 20,
@@ -156,6 +158,7 @@ app.put('/api/pomodoro-settings', (req, res) => {
     longBreakMin: longBreakMin || 5,
     soundEnabled: soundEnabled ? 1 : 0,
     soundStyle: soundStyle === 'meow' ? 'meow' : 'chime',
+    notificationsEnabled: notificationsEnabled ? 1 : 0,
   });
   res.json(req.body);
 });

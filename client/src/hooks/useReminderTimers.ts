@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReminderSettings } from '../types';
+import { notify } from '../notifications';
 
 export type ToastKind = 'hydration' | 'drops' | null;
 
@@ -24,17 +25,20 @@ function beep() {
 
 interface UseReminderTimersOptions {
   settings: ReminderSettings;
+  notificationsEnabled: boolean;
   onHydrationDone: () => void;
   onDropsDone: () => void;
 }
 
-export function useReminderTimers({ settings, onHydrationDone, onDropsDone }: UseReminderTimersOptions) {
+export function useReminderTimers({ settings, notificationsEnabled, onHydrationDone, onDropsDone }: UseReminderTimersOptions) {
   const [hydrationRemaining, setHydrationRemaining] = useState(settings.hydrationMinutes * 60);
   const [dropsRemaining, setDropsRemaining] = useState(settings.dropsMinutes * 60);
   const [toastKind, setToastKind] = useState<ToastKind>(null);
   const autoHideRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
+  const notificationsEnabledRef = useRef(notificationsEnabled);
+  notificationsEnabledRef.current = notificationsEnabled;
   const initedRef = useRef(false);
 
   // Only resync remaining time from settings once on load (or when minutes change while idle).
@@ -49,6 +53,10 @@ export function useReminderTimers({ settings, onHydrationDone, onDropsDone }: Us
   const showToast = useCallback((kind: ToastKind) => {
     setToastKind(kind);
     beep();
+    if (notificationsEnabledRef.current) {
+      if (kind === 'hydration') notify('Hydration check 💧🐾', { body: 'Time for some water.', tag: 'farpoint-hydration' });
+      else if (kind === 'drops') notify('Eye drops 💧🐾', { body: 'Time for your eye drops.', tag: 'farpoint-drops' });
+    }
     if (autoHideRef.current) clearTimeout(autoHideRef.current);
     autoHideRef.current = setTimeout(() => setToastKind(null), 30000);
   }, []);

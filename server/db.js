@@ -49,7 +49,8 @@ db.exec(`
     cycles_before_long INTEGER NOT NULL DEFAULT 3,
     long_break_min INTEGER NOT NULL DEFAULT 5,
     sound_enabled INTEGER NOT NULL DEFAULT 1,
-    sound_style TEXT NOT NULL DEFAULT 'chime'
+    sound_style TEXT NOT NULL DEFAULT 'chime',
+    notifications_enabled INTEGER NOT NULL DEFAULT 0
   );
 `);
 
@@ -67,6 +68,7 @@ ensureColumn('daily_stats', 'current_task', `current_task TEXT NOT NULL DEFAULT 
 ensureColumn('daily_stats', 'target_sessions', `target_sessions INTEGER NOT NULL DEFAULT 0`);
 ensureColumn('history', 'task', `task TEXT NOT NULL DEFAULT ''`);
 ensureColumn('pomodoro_settings', 'sound_style', `sound_style TEXT NOT NULL DEFAULT 'chime'`);
+ensureColumn('pomodoro_settings', 'notifications_enabled', `notifications_enabled INTEGER NOT NULL DEFAULT 0`);
 
 // Seed singleton settings rows if empty.
 db.prepare(`INSERT OR IGNORE INTO reminder_settings (id) VALUES (1)`).run();

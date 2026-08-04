@@ -2,6 +2,7 @@ import type { Phase, PomodoroSettings } from '../types';
 import { fmtClock } from '../utils';
 import CatMascot from './CatMascot';
 import type { CatMood } from './CatMascot';
+import { useNotificationPermission } from '../hooks/useNotificationPermission';
 
 const RING_CIRC = 628;
 
@@ -130,7 +131,45 @@ export function TimingSettings({ settings, onChange }: TimingSettingsProps) {
             </button>
           </div>
         </div>
+        <NotificationSettingsRow settings={settings} onChange={onChange} />
       </div>
     </details>
+  );
+}
+
+function NotificationSettingsRow({ settings, onChange }: TimingSettingsProps) {
+  const { supported, permission, request } = useNotificationPermission();
+
+  async function handleToggle(checked: boolean) {
+    onChange({ notificationsEnabled: checked });
+    if (checked && permission === 'default') await request();
+  }
+
+  return (
+    <>
+      <div className="field-row">
+        <span>Browser notifications</span>
+        <input
+          type="checkbox" style={{ width: 'auto' }}
+          checked={settings.notificationsEnabled}
+          disabled={!supported}
+          onChange={(e) => handleToggle(e.target.checked)}
+        />
+      </div>
+      {!supported && (
+        <p className="hint">Your browser doesn't support notifications.</p>
+      )}
+      {supported && settings.notificationsEnabled && permission === 'default' && (
+        <p className="hint">
+          Farpoint needs permission to notify you. <button type="button" className="small chip" onClick={() => request()}>Allow notifications</button>
+        </p>
+      )}
+      {supported && settings.notificationsEnabled && permission === 'denied' && (
+        <p className="hint">Blocked by your browser — enable notifications for this site in your browser's site settings.</p>
+      )}
+      {supported && settings.notificationsEnabled && permission === 'granted' && (
+        <p className="hint">On — you'll get a system notification for phase changes and reminders when this tab isn't in view. 🐾</p>
+      )}
+    </>
   );
 }

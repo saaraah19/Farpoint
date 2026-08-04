@@ -15,6 +15,7 @@ import { useHistory } from './hooks/useHistory';
 import { useReminderSettings, usePomodoroSettings } from './hooks/useSettings';
 import { useReminderTimers } from './hooks/useReminderTimers';
 import { playCelebration } from './sound';
+import { notify } from './notifications';
 import { DRILL_GOAL_SESSIONS } from './hooks/useDrill';
 import type { Feeling } from './types';
 
@@ -36,12 +37,14 @@ export default function App() {
 
   const reminders = useReminderTimers({
     settings: reminderSettings,
+    notificationsEnabled: pomodoroSettings.notificationsEnabled,
     onHydrationDone: () => updateStats({ hydrationCount: stats.hydrationCount + 1 }),
     onDropsDone: () => updateStats({ dropsCount: stats.dropsCount + 1 }),
   });
 
-  function fireCelebration() {
+  function fireCelebration(title: string, body: string) {
     if (pomodoroSettings.soundEnabled) playCelebration(pomodoroSettings.soundStyle);
+    if (pomodoroSettings.notificationsEnabled) notify(title, { body, tag: 'farpoint-celebration' });
     setCelebrating(true);
     setTimeout(() => setCelebrating(false), 1800);
   }
@@ -49,7 +52,7 @@ export default function App() {
   // Celebrate when the daily drill goal (both sessions) is freshly hit.
   useEffect(() => {
     if (stats.drillSessionsToday >= DRILL_GOAL_SESSIONS && prevDrillSessions.current < DRILL_GOAL_SESSIONS) {
-      fireCelebration();
+      fireCelebration('Eye pushups done for today! 🐾', 'Both drill sessions complete — nice work.');
     }
     prevDrillSessions.current = stats.drillSessionsToday;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -58,7 +61,7 @@ export default function App() {
   // Celebrate when the planned session target is freshly hit.
   useEffect(() => {
     if (stats.targetSessions > 0 && stats.cyclesToday >= stats.targetSessions && prevCycles.current < stats.targetSessions) {
-      fireCelebration();
+      fireCelebration('Today\'s goal reached! 🐾', `You hit your target of ${stats.targetSessions} sessions.`);
     }
     prevCycles.current = stats.cyclesToday;
     // eslint-disable-next-line react-hooks/exhaustive-deps

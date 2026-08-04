@@ -36,4 +36,5 @@ export interface PomodoroSettings {
   longBreakMin: number;
   soundEnabled: boolean;
   soundStyle: SoundStyle;
+  notificationsEnabled: boolean;
 }

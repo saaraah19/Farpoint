@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Phase, PomodoroSettings } from '../types';
 import { playPhaseSound } from '../sound';
+import { notify } from '../notifications';
 
 function phaseSeconds(phase: Phase, settings: PomodoroSettings): number {
   if (phase === 'work') return settings.workMin * 60;
@@ -35,12 +36,18 @@ export function usePomodoro({ settings, onWorkComplete }: UsePomodoroOptions) {
       const s = settingsRef.current;
       if (prevPhase === 'work') {
         if (s.soundEnabled) playPhaseSound(s.soundStyle, true);
+        if (s.notificationsEnabled) {
+          notify('Time to look away 🐾', { body: "Focus session done — find something 20+ feet away.", tag: 'farpoint-phase' });
+        }
         onWorkCompleteRef.current();
         const nextPhase: Phase = cycle % s.cyclesBeforeLong === 0 ? 'long' : 'break';
         setRemaining(phaseSeconds(nextPhase, s));
         return nextPhase;
       } else {
         if (s.soundEnabled) playPhaseSound(s.soundStyle, false);
+        if (s.notificationsEnabled) {
+          notify('Ready to focus? 🐾', { body: 'Break\'s over — back to your next session whenever you are.', tag: 'farpoint-phase' });
+        }
         setCycle((c) => c + 1);
         setRemaining(phaseSeconds('work', s));
         return 'work';
