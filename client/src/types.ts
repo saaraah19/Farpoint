@@ -22,6 +22,14 @@ export interface HistoryEntry {
   drillSessions: number;
 }
 
+export type EventKind = 'drops' | 'hydration';
+
+export interface EventEntry {
+  id: string;
+  ts: number;
+  kind: EventKind;
+}
+
 export interface ReminderSettings {
   hydrationEnabled: boolean;
   hydrationMinutes: number;
@@ -37,4 +45,5 @@ export interface PomodoroSettings {
   soundEnabled: boolean;
   soundStyle: SoundStyle;
   notificationsEnabled: boolean;
+  purrEnabled: boolean;
 }

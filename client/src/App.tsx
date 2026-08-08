@@ -9,23 +9,35 @@ import TaskBar from './components/TaskBar';
 import PlanCard from './components/PlanCard';
 import PawBurst from './components/PawBurst';
 import CatMascot from './components/CatMascot';
+import ExportCard from './components/ExportCard';
+import ComplianceHeatmap from './components/ComplianceHeatmap';
+import AdaptiveSuggestion from './components/AdaptiveSuggestion';
 import { usePomodoro } from './hooks/usePomodoro';
 import { useDailyStats } from './hooks/useDailyStats';
 import { useHistory } from './hooks/useHistory';
 import { useReminderSettings, usePomodoroSettings } from './hooks/useSettings';
 import { useReminderTimers } from './hooks/useReminderTimers';
+import { useEventLog } from './hooks/useEventLog';
+import { useDailyHistory } from './hooks/useDailyHistory';
+import { usePurrAmbient } from './hooks/usePurrAmbient';
 import { playCelebration } from './sound';
 import { notify } from './notifications';
 import { DRILL_GOAL_SESSIONS } from './hooks/useDrill';
 import type { Feeling } from './types';
+
+const STRAINED_FEELINGS: Feeling[] = ['tired', 'strained'];
 
 export default function App() {
   const { stats, update: updateStats } = useDailyStats();
   const { entries, addEntry, deleteEntry } = useHistory();
   const { settings: reminderSettings, update: updateReminderSettings } = useReminderSettings();
   const { settings: pomodoroSettings, update: updatePomodoroSettings } = usePomodoroSettings();
+  const dropsLog = useEventLog('drops');
+  const dailyHistory = useDailyHistory(84);
   const [modalOpen, setModalOpen] = useState(false);
   const [celebrating, setCelebrating] = useState(false);
+  const [zenMode, setZenMode] = useState(false);
+  const [dismissedSuggestionFor, setDismissedSuggestionFor] = useState<string | null>(null);
 
   const prevDrillSessions = useRef(stats.drillSessionsToday);
   const prevCycles = useRef(stats.cyclesToday);
@@ -35,11 +47,16 @@ export default function App() {
     onWorkComplete: () => updateStats({ cyclesToday: stats.cyclesToday + 1 }),
   });
 
+  usePurrAmbient(pomodoroSettings.purrEnabled && pomodoro.running && pomodoro.phase === 'work');
+
   const reminders = useReminderTimers({
     settings: reminderSettings,
     notificationsEnabled: pomodoroSettings.notificationsEnabled,
     onHydrationDone: () => updateStats({ hydrationCount: stats.hydrationCount + 1 }),
-    onDropsDone: () => updateStats({ dropsCount: stats.dropsCount + 1 }),
+    onDropsDone: () => {
+      updateStats({ dropsCount: stats.dropsCount + 1 });
+      dropsLog.add();
+    },
   });
 
   function fireCelebration(title: string, body: string) {
@@ -55,6 +72,7 @@ export default function App() {
       fireCelebration('Eye pushups done for today! 🐾', 'Both drill sessions complete — nice work.');
     }
     prevDrillSessions.current = stats.drillSessionsToday;
+    dailyHistory.refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stats.drillSessionsToday]);
 
@@ -64,11 +82,17 @@ export default function App() {
       fireCelebration('Today\'s goal reached! 🐾', `You hit your target of ${stats.targetSessions} sessions.`);
     }
     prevCycles.current = stats.cyclesToday;
+    dailyHistory.refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stats.cyclesToday, stats.targetSessions]);
 
   function handleDrillSessionComplete() {
     updateStats({ drillSessionsToday: stats.drillSessionsToday + 1 });
+  }
+
+  function handleLogDropNow() {
+    updateStats({ dropsCount: stats.dropsCount + 1 });
+    dropsLog.add();
   }
 
   function handleSaveLog(data: { feeling: Feeling; text: string }) {
@@ -83,83 +107,123 @@ export default function App() {
     setModalOpen(false);
   }
 
-  return (
-    <div className="app">
-      <header>
-        <div className="header-top">
-          <div>
-            <p className="eyebrow">For screen-heavy days</p>
-            <h1>Farpoint</h1>
-            <p className="sub">
-              20-20-20 pacing, a guided convergence drill, hydration &amp; eye-drop reminders, and a session log —
-              built for exophoria + high myopia during long focus sessions.
-            </p>
-          </div>
-          <CatMascot mood="idle" size={72} className="header-cat" />
-        </div>
-      </header>
+  // Adaptive pacing: if 2 of your last 3 logged sessions felt tired/strained,
+  // gently suggest shorter sessions. Re-appears only when a *new* entry
+  // changes that 3-entry window, not every render after being dismissed.
+  const recentThree = entries.slice(0, 3);
+  const strainedCount = recentThree.filter((e) => STRAINED_FEELINGS.includes(e.feeling)).length;
+  const recentSignature = recentThree.map((e) => e.id).join(',');
+  const suggestShorterSessions =
+    recentThree.length >= 2 &&
+    strainedCount >= 2 &&
+    pomodoroSettings.workMin > 15 &&
+    dismissedSuggestionFor !== recentSignature;
 
-      <TaskBar task={stats.currentTask} onChange={(task) => updateStats({ currentTask: task })} />
+  function handleShortenSessions() {
+    updatePomodoroSettings({ workMin: 15 });
+    setDismissedSuggestionFor(recentSignature);
+  }
+
+  return (
+    <div className={`app ${zenMode ? 'zen' : ''}`}>
+      {!zenMode && (
+        <header>
+          <div className="header-top">
+            <div>
+              <p className="eyebrow">For screen-heavy days</p>
+              <h1>Farpoint</h1>
+              <p className="sub">
+                20-20-20 pacing, a guided convergence drill, hydration &amp; eye-drop reminders, and a session log —
+                built for exophoria + high myopia during long focus sessions.
+              </p>
+            </div>
+            <CatMascot mood="idle" size={72} className="header-cat" />
+          </div>
+        </header>
+      )}
+
+      {!zenMode && <TaskBar task={stats.currentTask} onChange={(task) => updateStats({ currentTask: task })} />}
+
+      {!zenMode && suggestShorterSessions && (
+        <AdaptiveSuggestion
+          onShorten={handleShortenSessions}
+          onDismiss={() => setDismissedSuggestionFor(recentSignature)}
+        />
+      )}
 
       <TimerCard
         phase={pomodoro.phase}
         remaining={pomodoro.remaining}
+        total={pomodoro.total}
         fraction={pomodoro.fraction}
         running={pomodoro.running}
         cycle={pomodoro.cycle}
         cyclesToday={stats.cyclesToday}
         targetSessions={stats.targetSessions}
+        zenMode={zenMode}
         onToggle={pomodoro.toggleRunning}
         onSkip={pomodoro.skip}
         onReset={pomodoro.reset}
         onLogSession={() => setModalOpen(true)}
+        onToggleZen={() => setZenMode((z) => !z)}
       />
 
-      <PlanCard
-        workMin={pomodoroSettings.workMin}
-        targetSessions={stats.targetSessions}
-        cyclesToday={stats.cyclesToday}
-        onChangeTarget={(target) => updateStats({ targetSessions: target })}
-      />
+      {!zenMode && (
+        <>
+          <PlanCard
+            workMin={pomodoroSettings.workMin}
+            targetSessions={stats.targetSessions}
+            cyclesToday={stats.cyclesToday}
+            onChangeTarget={(target) => updateStats({ targetSessions: target })}
+          />
 
-      <TimingSettings settings={pomodoroSettings} onChange={updatePomodoroSettings} />
+          <TimingSettings settings={pomodoroSettings} onChange={updatePomodoroSettings} />
 
-      <DrillCard
-        drillSessionsToday={stats.drillSessionsToday}
-        onSessionComplete={handleDrillSessionComplete}
-      />
+          <DrillCard
+            drillSessionsToday={stats.drillSessionsToday}
+            onSessionComplete={handleDrillSessionComplete}
+          />
 
-      <RemindersCard
-        settings={reminderSettings}
-        onChange={updateReminderSettings}
-        hydrationRemaining={reminders.hydrationRemaining}
-        dropsRemaining={reminders.dropsRemaining}
-        hydrationCount={stats.hydrationCount}
-        dropsCount={stats.dropsCount}
-      />
+          <RemindersCard
+            settings={reminderSettings}
+            onChange={updateReminderSettings}
+            hydrationRemaining={reminders.hydrationRemaining}
+            dropsRemaining={reminders.dropsRemaining}
+            hydrationCount={stats.hydrationCount}
+            dropsCount={stats.dropsCount}
+            dropEvents={dropsLog.events}
+            onLogDrop={handleLogDropNow}
+            onRemoveDrop={dropsLog.remove}
+          />
 
-      <HistoryCard
-        entries={entries}
-        onNewEntry={() => setModalOpen(true)}
-        onDelete={deleteEntry}
-      />
+          <HistoryCard
+            entries={entries}
+            onNewEntry={() => setModalOpen(true)}
+            onDelete={deleteEntry}
+          />
 
-      <details>
-        <summary>Quick reference</summary>
-        <div className="details-body">
-          <ul className="tips-list">
-            <li>Screen at arm's length (50–70cm) — zoom text up rather than leaning in.</li>
-            <li>Top of screen at or just below eye level, to reduce how wide your eyes open.</li>
-            <li>Blink fully and deliberately every so often — screen focus cuts blink rate by more than half.</li>
-            <li>Keep room light close to screen brightness; avoid a dark room with only the screen lit.</li>
-            <li>Do the drill before long sessions, not just when your eyes already feel tired.</li>
-          </ul>
-          <p className="disclaimer">
-            This is a pacing tool, not a medical device. Keep following your eye doctor's specific exercise
-            prescription — if discomfort persists despite consistent breaks, that's worth a follow-up appointment.
-          </p>
-        </div>
-      </details>
+          <ComplianceHeatmap history={dailyHistory.history} />
+
+          <ExportCard />
+
+          <details>
+            <summary>Quick reference</summary>
+            <div className="details-body">
+              <ul className="tips-list">
+                <li>Screen at arm's length (50–70cm) — zoom text up rather than leaning in.</li>
+                <li>Top of screen at or just below eye level, to reduce how wide your eyes open.</li>
+                <li>Blink fully and deliberately every so often — screen focus cuts blink rate by more than half.</li>
+                <li>Keep room light close to screen brightness; avoid a dark room with only the screen lit.</li>
+                <li>Do the drill before long sessions, not just when your eyes already feel tired.</li>
+              </ul>
+              <p className="disclaimer">
+                This is a pacing tool, not a medical device. Keep following your eye doctor's specific exercise
+                prescription — if discomfort persists despite consistent breaks, that's worth a follow-up appointment.
+              </p>
+            </div>
+          </details>
+        </>
+      )}
 
       <Toast kind={reminders.toastKind} onDone={reminders.markDone} onSnooze={reminders.snooze} />
 

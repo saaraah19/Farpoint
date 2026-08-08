@@ -13,3 +13,7 @@ export function fmtLongClock(totalSeconds: number): string {
   if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
   return `${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
 }
+
+export function fmtTime(ts: number): string {
+  return new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}

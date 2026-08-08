@@ -17,6 +17,7 @@ const DEFAULT_POMODORO: PomodoroSettings = {
   soundEnabled: true,
   soundStyle: 'chime',
   notificationsEnabled: false,
+  purrEnabled: false,
 };
 
 export function useReminderSettings() {

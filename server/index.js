@@ -18,6 +18,18 @@ function todayKey() {
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
 
+function dateKeyFor(ts) {
+  // Same YYYY-MM-DD-in-local-time logic as todayKey(), for an arbitrary timestamp.
+  const d = new Date(ts);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+function csvEscape(value) {
+  const s = String(value ?? '');
+  if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+
 function rowToDaily(row, date) {
   return {
     date,
@@ -61,6 +73,32 @@ app.put('/api/daily', (req, res) => {
       target_sessions = @targetSessions
   `).run({ date, ...next });
   res.json({ date, ...next });
+});
+
+// ---- Event log (e.g. eye-drop / hydration timestamps during the day) ----
+app.get('/api/events', (req, res) => {
+  const date = req.query.date || todayKey();
+  const kind = req.query.kind;
+  const rows = db.prepare('SELECT * FROM event_log ORDER BY ts ASC').all();
+  const filtered = rows.filter(r => dateKeyFor(r.ts) === date && (!kind || r.kind === kind));
+  res.json(filtered.map(r => ({ id: r.id, ts: r.ts, kind: r.kind })));
+});
+
+app.post('/api/events', (req, res) => {
+  const { kind } = req.body;
+  if (!kind) return res.status(400).json({ error: 'kind is required' });
+  const entry = {
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+    ts: Date.now(),
+    kind,
+  };
+  db.prepare('INSERT INTO event_log (id, ts, kind) VALUES (@id, @ts, @kind)').run(entry);
+  res.status(201).json(entry);
+});
+
+app.delete('/api/events/:id', (req, res) => {
+  db.prepare('DELETE FROM event_log WHERE id = ?').run(req.params.id);
+  res.status(204).end();
 });
 
 // ---- History / session log ----
@@ -136,11 +174,12 @@ app.get('/api/pomodoro-settings', (req, res) => {
     soundEnabled: !!row.sound_enabled,
     soundStyle: row.sound_style || 'chime',
     notificationsEnabled: !!row.notifications_enabled,
+    purrEnabled: !!row.purr_enabled,
   });
 });
 
 app.put('/api/pomodoro-settings', (req, res) => {
-  const { workMin, breakSec, cyclesBeforeLong, longBreakMin, soundEnabled, soundStyle, notificationsEnabled } = req.body;
+  const { workMin, breakSec, cyclesBeforeLong, longBreakMin, soundEnabled, soundStyle, notificationsEnabled, purrEnabled } = req.body;
   db.prepare(`
     UPDATE pomodoro_settings SET
       work_min = @workMin,
@@ -149,7 +188,8 @@ app.put('/api/pomodoro-settings', (req, res) => {
       long_break_min = @longBreakMin,
       sound_enabled = @soundEnabled,
       sound_style = @soundStyle,
-      notifications_enabled = @notificationsEnabled
+      notifications_enabled = @notificationsEnabled,
+      purr_enabled = @purrEnabled
     WHERE id = 1
   `).run({
     workMin: workMin || 20,
@@ -159,8 +199,71 @@ app.put('/api/pomodoro-settings', (req, res) => {
     soundEnabled: soundEnabled ? 1 : 0,
     soundStyle: soundStyle === 'meow' ? 'meow' : 'chime',
     notificationsEnabled: notificationsEnabled ? 1 : 0,
+    purrEnabled: purrEnabled ? 1 : 0,
   });
   res.json(req.body);
+});
+
+// ---- Daily history (for the compliance heatmap) ----
+app.get('/api/daily-history', (req, res) => {
+  const days = Math.min(365, Math.max(1, parseInt(req.query.days, 10) || 84));
+  const rows = db.prepare('SELECT * FROM daily_stats ORDER BY date DESC LIMIT ?').all(days);
+  res.json(rows.reverse().map(r => rowToDaily(r, r.date)));
+});
+
+// ---- Spreadsheet export ----
+app.get('/api/export.csv', (req, res) => {
+  const dailyRows = db.prepare('SELECT * FROM daily_stats ORDER BY date ASC').all();
+  const historyRows = db.prepare('SELECT * FROM history ORDER BY ts ASC').all();
+  const dropRows = db.prepare("SELECT * FROM event_log WHERE kind = 'drops' ORDER BY ts ASC").all();
+  const settingsRow = db.prepare('SELECT * FROM pomodoro_settings WHERE id = 1').get();
+  const workMin = settingsRow?.work_min || 20;
+
+  const feelingsByDate = {};
+  const tasksByDate = {};
+  for (const h of historyRows) {
+    const d = dateKeyFor(h.ts);
+    if (!feelingsByDate[d]) feelingsByDate[d] = [];
+    feelingsByDate[d].push(h.feeling);
+    if (h.task) {
+      if (!tasksByDate[d]) tasksByDate[d] = [];
+      tasksByDate[d].push(h.task);
+    }
+  }
+  const dropsByDate = {};
+  for (const e of dropRows) {
+    const d = dateKeyFor(e.ts);
+    if (!dropsByDate[d]) dropsByDate[d] = [];
+    dropsByDate[d].push(new Date(e.ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }));
+  }
+
+  const header = [
+    'Date', 'Focus Sessions', 'Target Sessions', 'Hours Focused (approx)',
+    'Eye-Pushup Sessions (of 2)', 'Hydration Count', 'Drops Count',
+    'Drop Times', 'Feelings Logged', 'Tasks Logged',
+  ];
+  const lines = [header.map(csvEscape).join(',')];
+
+  for (const row of dailyRows) {
+    const date = row.date;
+    const hours = (((row.cycles_today || 0) * workMin) / 60).toFixed(1);
+    lines.push([
+      date,
+      row.cycles_today || 0,
+      row.target_sessions || 0,
+      hours,
+      row.drill_sessions_today || 0,
+      row.hydration_count || 0,
+      row.drops_count || 0,
+      (dropsByDate[date] || []).join('; '),
+      (feelingsByDate[date] || []).join('; '),
+      (tasksByDate[date] || []).join('; '),
+    ].map(csvEscape).join(','));
+  }
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="farpoint-export-${todayKey()}.csv"`);
+  res.status(200).send(lines.join('\r\n'));
 });
 
 // ---- Serve built frontend in production ----

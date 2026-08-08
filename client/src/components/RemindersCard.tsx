@@ -1,5 +1,5 @@
-import type { ReminderSettings } from '../types';
-import { fmtLongClock } from '../utils';
+import type { EventEntry, ReminderSettings } from '../types';
+import { fmtLongClock, fmtTime } from '../utils';
 
 interface RemindersCardProps {
   settings: ReminderSettings;
@@ -8,10 +8,14 @@ interface RemindersCardProps {
   dropsRemaining: number;
   hydrationCount: number;
   dropsCount: number;
+  dropEvents: EventEntry[];
+  onLogDrop: () => void;
+  onRemoveDrop: (id: string) => void;
 }
 
 export default function RemindersCard({
   settings, onChange, hydrationRemaining, dropsRemaining, hydrationCount, dropsCount,
+  dropEvents, onLogDrop, onRemoveDrop,
 }: RemindersCardProps) {
   return (
     <div className="card">
@@ -63,6 +67,25 @@ export default function RemindersCard({
             <span className="switch-track" />
           </label>
         </div>
+      </div>
+
+      <div className="drops-log">
+        <div className="drops-log-header">
+          <span>Today's drops</span>
+          <button type="button" className="small chip" onClick={onLogDrop}>+ Log a drop now</button>
+        </div>
+        {dropEvents.length === 0 ? (
+          <p className="hint">No drops logged yet today.</p>
+        ) : (
+          <ul className="drops-log-list">
+            {dropEvents.map((e) => (
+              <li key={e.id} className="drops-log-item">
+                <span>💧 {fmtTime(e.ts)}</span>
+                <button type="button" className="drops-log-remove" onClick={() => onRemoveDrop(e.id)} aria-label="Remove entry">✕</button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   );

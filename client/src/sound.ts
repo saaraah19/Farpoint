@@ -102,3 +102,65 @@ export function playCelebration(style: SoundStyle) {
     setTimeout(() => playChime(true), 200);
   }
 }
+
+let purrNodes: { masterGain: GainNode; carrier: OscillatorNode; lfo: OscillatorNode } | null = null;
+
+/**
+ * Starts a very soft, low looping "purr" — an amplitude-modulated low
+ * triangle wave through a lowpass filter. Ambient background texture for
+ * focus sessions, synthesized (no audio file, nothing to license). Safe to
+ * call repeatedly; it's a no-op if already running.
+ */
+export function startPurr() {
+  if (purrNodes) return;
+  const ctx = getCtx();
+  if (!ctx) return;
+
+  const carrier = ctx.createOscillator();
+  carrier.type = 'triangle';
+  carrier.frequency.value = 34;
+
+  const lfo = ctx.createOscillator();
+  lfo.type = 'sine';
+  lfo.frequency.value = 5.4; // purring "rumble" rate
+
+  const lfoGain = ctx.createGain();
+  lfoGain.gain.value = 0.5;
+  lfo.connect(lfoGain);
+
+  const ampGain = ctx.createGain();
+  ampGain.gain.value = 0.5;
+  lfoGain.connect(ampGain.gain);
+  carrier.connect(ampGain);
+
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = 140;
+  ampGain.connect(filter);
+
+  const masterGain = ctx.createGain();
+  masterGain.gain.setValueAtTime(0.0001, ctx.currentTime);
+  masterGain.gain.linearRampToValueAtTime(0.035, ctx.currentTime + 1.2); // gentle fade in
+  filter.connect(masterGain);
+  masterGain.connect(ctx.destination);
+
+  carrier.start();
+  lfo.start();
+  purrNodes = { masterGain, carrier, lfo };
+}
+
+/** Fades out and tears down the purr loop, if running. */
+export function stopPurr() {
+  if (!purrNodes) return;
+  const ctx = getCtx();
+  const { masterGain, carrier, lfo } = purrNodes;
+  purrNodes = null;
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  masterGain.gain.cancelScheduledValues(t);
+  masterGain.gain.setValueAtTime(masterGain.gain.value, t);
+  masterGain.gain.linearRampToValueAtTime(0.0001, t + 0.6);
+  setTimeout(() => {
+    try { carrier.stop(); lfo.stop(); } catch { /* already stopped */ }
+  }, 700);
+}
