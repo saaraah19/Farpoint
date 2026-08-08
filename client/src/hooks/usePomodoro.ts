@@ -3,6 +3,12 @@ import type { Phase, PomodoroSettings } from '../types';
 import { playPhaseSound } from '../sound';
 import { notify } from '../notifications';
 
+// How long the tab can be hidden before we stop trusting that you were
+// actually working and auto-pause instead of silently crediting the time.
+// Below this, a tab-switch just counts accurately (see syncToNow) same as
+// always — this only kicks in for genuinely long absences.
+const AFK_THRESHOLD_MS = 3 * 60 * 1000;
+
 function phaseSeconds(phase: Phase, settings: PomodoroSettings): number {
   if (phase === 'work') return settings.workMin * 60;
   if (phase === 'break') return settings.breakSec;
@@ -32,6 +38,9 @@ interface State extends CoreState {
   // wall-clock time crossed more than one phase boundary before we next got
   // a chance to check — see TICK below.
   pendingWorkCompletions: number;
+  // Set right after an AFK auto-pause, so the UI can explain why it paused
+  // itself. Cleared on resume or explicit dismissal.
+  awayMinutes: number | null;
 }
 
 type Action =
@@ -40,7 +49,9 @@ type Action =
   | { type: 'TOGGLE'; now: number }
   | { type: 'RESET'; settings: PomodoroSettings }
   | { type: 'SYNC_REMAINING'; settings: PomodoroSettings }
-  | { type: 'FLUSH_COMPLETIONS' };
+  | { type: 'FLUSH_COMPLETIONS' }
+  | { type: 'AFK_PAUSE'; settings: PomodoroSettings; cappedNow: number; awayMinutes: number }
+  | { type: 'DISMISS_AWAY_NOTICE' };
 
 // Recomputes remaining/phase/cycle from real elapsed time rather than from
 // "one tick = one second". Background tabs get their timers throttled by the
@@ -97,8 +108,9 @@ function reducer(state: State, action: Action): State {
         const remaining = state.endAt !== null ? Math.max(0, Math.ceil((state.endAt - action.now) / 1000)) : state.remaining;
         return { ...state, running: false, remaining, endAt: null };
       }
-      // Resuming: anchor a fresh end timestamp to *now* based on remaining.
-      return { ...state, running: true, endAt: action.now + state.remaining * 1000 };
+      // Resuming: anchor a fresh end timestamp to *now* based on remaining,
+      // and clear any stale "you were away" notice.
+      return { ...state, running: true, endAt: action.now + state.remaining * 1000, awayMinutes: null };
     }
 
     case 'RESET':
@@ -109,6 +121,7 @@ function reducer(state: State, action: Action): State {
         remaining: phaseSeconds('work', action.settings),
         endAt: null,
         pendingWorkCompletions: 0,
+        awayMinutes: null,
       };
 
     case 'SYNC_REMAINING':
@@ -117,13 +130,30 @@ function reducer(state: State, action: Action): State {
     case 'FLUSH_COMPLETIONS':
       return state.pendingWorkCompletions === 0 ? state : { ...state, pendingWorkCompletions: 0 };
 
+    case 'AFK_PAUSE': {
+      // Advance state only up to the threshold moment (not the full real
+      // absence), so a multi-hour forgotten tab doesn't get credited beyond
+      // what we actually trust — then pause there and note how long you
+      // were really away, for the UI to explain itself.
+      const synced = syncToNow(state, action.settings, action.cappedNow);
+      const remaining = synced.endAt !== null ? Math.max(0, Math.ceil((synced.endAt - action.cappedNow) / 1000)) : synced.remaining;
+      return { ...synced, running: false, endAt: null, remaining, awayMinutes: action.awayMinutes };
+    }
+
+    case 'DISMISS_AWAY_NOTICE':
+      return state.awayMinutes === null ? state : { ...state, awayMinutes: null };
+
     default:
       return state;
   }
 }
 
 function initState(settings: PomodoroSettings): State {
-  return { phase: 'work', cycle: 1, running: false, remaining: phaseSeconds('work', settings), endAt: null, pendingWorkCompletions: 0 };
+  return {
+    phase: 'work', cycle: 1, running: false,
+    remaining: phaseSeconds('work', settings), endAt: null,
+    pendingWorkCompletions: 0, awayMinutes: null,
+  };
 }
 
 interface UsePomodoroOptions {
@@ -138,6 +168,9 @@ export function usePomodoro({ settings, onWorkComplete }: UsePomodoroOptions) {
   settingsRef.current = settings;
   const onWorkCompleteRef = useRef(onWorkComplete);
   onWorkCompleteRef.current = onWorkComplete;
+  const runningRef = useRef(state.running);
+  runningRef.current = state.running;
+  const hiddenAtRef = useRef<number | null>(null);
 
   const tick = useCallback(() => {
     dispatch({ type: 'TICK', settings: settingsRef.current, now: Date.now() });
@@ -159,17 +192,37 @@ export function usePomodoro({ settings, onWorkComplete }: UsePomodoroOptions) {
     return () => clearInterval(id);
   }, [state.running, tick]);
 
-  // Resync the instant the tab becomes visible/focused again, so returning
-  // from another tab shows the correct remaining time immediately instead of
-  // waiting for the next (possibly throttled) interval tick.
+  // Track when the tab goes hidden, and decide what to do when it comes
+  // back: a brief absence just resyncs accurately (as before); a long one
+  // (AFK_THRESHOLD_MS+) auto-pauses instead of silently fast-forwarding
+  // through however many phases technically elapsed while you weren't there.
   useEffect(() => {
-    function onVisible() {
-      if (document.visibilityState === 'visible') tick();
+    function onVisibilityChange() {
+      if (document.visibilityState === 'hidden') {
+        hiddenAtRef.current = Date.now();
+        return;
+      }
+      // Becoming visible again.
+      const hiddenAt = hiddenAtRef.current;
+      hiddenAtRef.current = null;
+      if (hiddenAt !== null && runningRef.current && settingsRef.current.afkPauseEnabled) {
+        const awayMs = Date.now() - hiddenAt;
+        if (awayMs > AFK_THRESHOLD_MS) {
+          dispatch({
+            type: 'AFK_PAUSE',
+            settings: settingsRef.current,
+            cappedNow: hiddenAt + AFK_THRESHOLD_MS,
+            awayMinutes: Math.round(awayMs / 60000),
+          });
+          return;
+        }
+      }
+      tick();
     }
-    document.addEventListener('visibilitychange', onVisible);
+    document.addEventListener('visibilitychange', onVisibilityChange);
     window.addEventListener('focus', tick);
     return () => {
-      document.removeEventListener('visibilitychange', onVisible);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('focus', tick);
     };
   }, [tick]);
@@ -213,9 +266,14 @@ export function usePomodoro({ settings, onWorkComplete }: UsePomodoroOptions) {
   const toggleRunning = useCallback(() => dispatch({ type: 'TOGGLE', now: Date.now() }), []);
   const skip = useCallback(() => dispatch({ type: 'SKIP', settings: settingsRef.current, now: Date.now() }), []);
   const reset = useCallback(() => dispatch({ type: 'RESET', settings: settingsRef.current }), []);
+  const dismissAwayNotice = useCallback(() => dispatch({ type: 'DISMISS_AWAY_NOTICE' }), []);
 
   const total = phaseSeconds(state.phase, settings);
   const fraction = total > 0 ? state.remaining / total : 0;
 
-  return { phase: state.phase, remaining: state.remaining, running: state.running, cycle: state.cycle, total, fraction, toggleRunning, skip, reset };
+  return {
+    phase: state.phase, remaining: state.remaining, running: state.running, cycle: state.cycle,
+    awayMinutes: state.awayMinutes,
+    total, fraction, toggleRunning, skip, reset, dismissAwayNotice,
+  };
 }

@@ -3,6 +3,7 @@ import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import webpush from 'web-push';
 import db from './db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -11,6 +12,54 @@ const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
+
+// ---- Push notifications (web-push / VAPID) ----
+// Keys are generated once and persisted, so subscriptions from browsers
+// stay valid across server restarts/redeploys.
+function ensureVapidKeys() {
+  let row = db.prepare('SELECT * FROM vapid_keys WHERE id = 1').get();
+  if (!row) {
+    const keys = webpush.generateVAPIDKeys();
+    db.prepare('INSERT INTO vapid_keys (id, public_key, private_key) VALUES (1, ?, ?)').run(keys.publicKey, keys.privateKey);
+    row = { public_key: keys.publicKey, private_key: keys.privateKey };
+  }
+  return row;
+}
+const vapidKeys = ensureVapidKeys();
+webpush.setVapidDetails('mailto:farpoint@example.com', vapidKeys.public_key, vapidKeys.private_key);
+
+async function sendPushToAll(title, body) {
+  const subs = db.prepare('SELECT * FROM push_subscriptions').all();
+  const payload = JSON.stringify({ title, body });
+  await Promise.all(subs.map(async (sub) => {
+    try {
+      await webpush.sendNotification(
+        { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+        payload
+      );
+    } catch (err) {
+      // 404/410 means the browser dropped the subscription (uninstalled,
+      // cleared data, etc.) — clean it up so we stop trying.
+      if (err && (err.statusCode === 404 || err.statusCode === 410)) {
+        db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').run(sub.endpoint);
+      } else {
+        console.error('Push send failed:', err && err.message);
+      }
+    }
+  }));
+}
+
+// Checks for any schedule that's come due and fires it. Runs regardless of
+// whether any browser tab is open — this is what lets a notification arrive
+// after you've closed everything, as long as this server process is alive.
+setInterval(async () => {
+  const now = Date.now();
+  const due = db.prepare('SELECT * FROM scheduled_push WHERE fire_at <= ?').all(now);
+  for (const row of due) {
+    db.prepare('DELETE FROM scheduled_push WHERE kind = ?').run(row.kind);
+    await sendPushToAll(row.title, row.body);
+  }
+}, 20000);
 
 function todayKey() {
   // YYYY-MM-DD in server local time
@@ -39,6 +88,7 @@ function rowToDaily(row, date) {
     dropsCount: row?.drops_count ?? 0,
     currentTask: row?.current_task ?? '',
     targetSessions: row?.target_sessions ?? 0,
+    blinkCount: row?.blink_count ?? 0,
   };
 }
 
@@ -60,17 +110,19 @@ app.put('/api/daily', (req, res) => {
     dropsCount: req.body.dropsCount ?? current.dropsCount,
     currentTask: req.body.currentTask ?? current.currentTask,
     targetSessions: req.body.targetSessions ?? current.targetSessions,
+    blinkCount: req.body.blinkCount ?? current.blinkCount,
   };
   db.prepare(`
-    INSERT INTO daily_stats (date, cycles_today, drill_sessions_today, hydration_count, drops_count, current_task, target_sessions)
-    VALUES (@date, @cyclesToday, @drillSessionsToday, @hydrationCount, @dropsCount, @currentTask, @targetSessions)
+    INSERT INTO daily_stats (date, cycles_today, drill_sessions_today, hydration_count, drops_count, current_task, target_sessions, blink_count)
+    VALUES (@date, @cyclesToday, @drillSessionsToday, @hydrationCount, @dropsCount, @currentTask, @targetSessions, @blinkCount)
     ON CONFLICT(date) DO UPDATE SET
       cycles_today = @cyclesToday,
       drill_sessions_today = @drillSessionsToday,
       hydration_count = @hydrationCount,
       drops_count = @dropsCount,
       current_task = @currentTask,
-      target_sessions = @targetSessions
+      target_sessions = @targetSessions,
+      blink_count = @blinkCount
   `).run({ date, ...next });
   res.json({ date, ...next });
 });
@@ -142,23 +194,29 @@ app.get('/api/reminder-settings', (req, res) => {
     hydrationMinutes: row.hydration_minutes,
     dropsEnabled: !!row.drops_enabled,
     dropsMinutes: row.drops_minutes,
+    blinkEnabled: row.blink_enabled === undefined ? true : !!row.blink_enabled,
+    blinkMinutes: row.blink_minutes ?? 10,
   });
 });
 
 app.put('/api/reminder-settings', (req, res) => {
-  const { hydrationEnabled, hydrationMinutes, dropsEnabled, dropsMinutes } = req.body;
+  const { hydrationEnabled, hydrationMinutes, dropsEnabled, dropsMinutes, blinkEnabled, blinkMinutes } = req.body;
   db.prepare(`
     UPDATE reminder_settings SET
       hydration_enabled = @hydrationEnabled,
       hydration_minutes = @hydrationMinutes,
       drops_enabled = @dropsEnabled,
-      drops_minutes = @dropsMinutes
+      drops_minutes = @dropsMinutes,
+      blink_enabled = @blinkEnabled,
+      blink_minutes = @blinkMinutes
     WHERE id = 1
   `).run({
     hydrationEnabled: hydrationEnabled ? 1 : 0,
     hydrationMinutes: hydrationMinutes || 45,
     dropsEnabled: dropsEnabled ? 1 : 0,
     dropsMinutes: dropsMinutes || 120,
+    blinkEnabled: blinkEnabled === false ? 0 : 1,
+    blinkMinutes: blinkMinutes || 10,
   });
   res.json(req.body);
 });
@@ -175,11 +233,12 @@ app.get('/api/pomodoro-settings', (req, res) => {
     soundStyle: row.sound_style || 'chime',
     notificationsEnabled: !!row.notifications_enabled,
     purrEnabled: !!row.purr_enabled,
+    afkPauseEnabled: row.afk_pause_enabled === undefined ? true : !!row.afk_pause_enabled,
   });
 });
 
 app.put('/api/pomodoro-settings', (req, res) => {
-  const { workMin, breakSec, cyclesBeforeLong, longBreakMin, soundEnabled, soundStyle, notificationsEnabled, purrEnabled } = req.body;
+  const { workMin, breakSec, cyclesBeforeLong, longBreakMin, soundEnabled, soundStyle, notificationsEnabled, purrEnabled, afkPauseEnabled } = req.body;
   db.prepare(`
     UPDATE pomodoro_settings SET
       work_min = @workMin,
@@ -189,7 +248,8 @@ app.put('/api/pomodoro-settings', (req, res) => {
       sound_enabled = @soundEnabled,
       sound_style = @soundStyle,
       notifications_enabled = @notificationsEnabled,
-      purr_enabled = @purrEnabled
+      purr_enabled = @purrEnabled,
+      afk_pause_enabled = @afkPauseEnabled
     WHERE id = 1
   `).run({
     workMin: workMin || 20,
@@ -200,6 +260,7 @@ app.put('/api/pomodoro-settings', (req, res) => {
     soundStyle: soundStyle === 'meow' ? 'meow' : 'chime',
     notificationsEnabled: notificationsEnabled ? 1 : 0,
     purrEnabled: purrEnabled ? 1 : 0,
+    afkPauseEnabled: afkPauseEnabled === false ? 0 : 1,
   });
   res.json(req.body);
 });
@@ -264,6 +325,59 @@ app.get('/api/export.csv', (req, res) => {
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="farpoint-export-${todayKey()}.csv"`);
   res.status(200).send(lines.join('\r\n'));
+});
+
+// ---- Push subscription management ----
+app.get('/api/push/public-key', (req, res) => {
+  res.json({ publicKey: vapidKeys.public_key });
+});
+
+app.post('/api/push/subscribe', (req, res) => {
+  const { endpoint, keys } = req.body;
+  if (!endpoint || !keys || !keys.p256dh || !keys.auth) {
+    return res.status(400).json({ error: 'invalid subscription' });
+  }
+  db.prepare(`
+    INSERT INTO push_subscriptions (endpoint, p256dh, auth, created_at)
+    VALUES (@endpoint, @p256dh, @auth, @createdAt)
+    ON CONFLICT(endpoint) DO UPDATE SET p256dh = @p256dh, auth = @auth
+  `).run({ endpoint, p256dh: keys.p256dh, auth: keys.auth, createdAt: Date.now() });
+  res.status(201).json({ ok: true });
+});
+
+app.post('/api/push/unsubscribe', (req, res) => {
+  const { endpoint } = req.body;
+  if (endpoint) db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').run(endpoint);
+  res.status(204).end();
+});
+
+app.post('/api/push/test', async (req, res) => {
+  const count = db.prepare('SELECT COUNT(*) AS n FROM push_subscriptions').get().n;
+  if (count === 0) return res.status(400).json({ error: 'no subscriptions registered' });
+  await sendPushToAll('Farpoint 🐾', 'Push notifications are working.');
+  res.json({ ok: true, sentTo: count });
+});
+
+// ---- Push scheduling ----
+// The client tells us the next time something should notify (a phase
+// ending, a reminder coming due) and we hold onto just that one upcoming
+// moment per kind. When the browser is open, the in-page notification/sound
+// already covers it and this is mostly redundant; the point is that this
+// still fires via the server even if every browser window gets closed.
+// Passing fireAt: null cancels that kind's pending schedule (e.g. on pause).
+app.put('/api/push/schedule', (req, res) => {
+  const { kind, fireAt, title, body } = req.body;
+  if (!kind) return res.status(400).json({ error: 'kind is required' });
+  if (fireAt == null) {
+    db.prepare('DELETE FROM scheduled_push WHERE kind = ?').run(kind);
+    return res.json({ kind, cleared: true });
+  }
+  db.prepare(`
+    INSERT INTO scheduled_push (kind, fire_at, title, body)
+    VALUES (@kind, @fireAt, @title, @body)
+    ON CONFLICT(kind) DO UPDATE SET fire_at = @fireAt, title = @title, body = @body
+  `).run({ kind, fireAt, title: title || 'Farpoint 🐾', body: body || '' });
+  res.json({ kind, fireAt, title, body });
 });
 
 // ---- Serve built frontend in production ----

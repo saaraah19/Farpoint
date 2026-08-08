@@ -54,16 +54,18 @@ interface TimerCardProps {
   cyclesToday: number;
   targetSessions: number;
   zenMode: boolean;
+  awayMinutes: number | null;
   onToggle: () => void;
   onSkip: () => void;
   onReset: () => void;
   onLogSession: () => void;
   onToggleZen: () => void;
+  onDismissAway: () => void;
 }
 
 export default function TimerCard({
-  phase, remaining, total, fraction, running, cycle, cyclesToday, targetSessions, zenMode,
-  onToggle, onSkip, onReset, onLogSession, onToggleZen,
+  phase, remaining, total, fraction, running, cycle, cyclesToday, targetSessions, zenMode, awayMinutes,
+  onToggle, onSkip, onReset, onLogSession, onToggleZen, onDismissAway,
 }: TimerCardProps) {
   const meta = PHASE_META[phase];
   const dashoffset = RING_CIRC * (1 - fraction);
@@ -94,6 +96,12 @@ export default function TimerCard({
           </div>
         </div>
         {!zenMode && <p className="phase-hint">{hintFor(phase, cycle)}</p>}
+        {awayMinutes !== null && (
+          <div className="away-banner">
+            <span>🐾 Paused automatically — you were away about {awayMinutes} min. Press Start when you're back.</span>
+            <button type="button" className="small ghost" onClick={onDismissAway}>Dismiss</button>
+          </div>
+        )}
         <div className="controls">
           <button className="primary" onClick={onToggle}>{running ? 'Pause' : 'Start'}</button>
           <button className="ghost" onClick={onSkip}>Skip phase</button>
@@ -179,6 +187,12 @@ export function TimingSettings({ settings, onChange }: TimingSettingsProps) {
             onChange={(e) => onChange({ purrEnabled: e.target.checked })} />
         </div>
         <p className="hint">A very soft looping purr plays in the background during work sessions only.</p>
+        <div className="field-row">
+          <span>Auto-pause if away too long</span>
+          <input type="checkbox" style={{ width: 'auto' }} checked={settings.afkPauseEnabled}
+            onChange={(e) => onChange({ afkPauseEnabled: e.target.checked })} />
+        </div>
+        <p className="hint">If this tab is hidden for more than a few minutes while running, Farpoint pauses instead of silently counting that time as focused.</p>
         <NotificationSettingsRow settings={settings} onChange={onChange} />
       </div>
     </details>

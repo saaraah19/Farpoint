@@ -10,6 +10,7 @@ const EMPTY: DailyStats = {
   dropsCount: 0,
   currentTask: '',
   targetSessions: 0,
+  blinkCount: 0,
 };
 
 export function useDailyStats() {

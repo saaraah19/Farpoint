@@ -1,0 +1,12 @@
+{
+  "name": "Farpoint",
+  "short_name": "Farpoint",
+  "description": "Cozy 20-20-20 pacing, eye-pushup drill, and reminders for screen-heavy days.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fbf3e7",
+  "theme_color": "#e2703a",
+  "icons": [
+    { "src": "/paw-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

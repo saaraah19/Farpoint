@@ -6,20 +6,46 @@ interface RemindersCardProps {
   onChange: (patch: Partial<ReminderSettings>) => void;
   hydrationRemaining: number;
   dropsRemaining: number;
+  blinkRemaining: number;
   hydrationCount: number;
   dropsCount: number;
+  blinkCount: number;
   dropEvents: EventEntry[];
   onLogDrop: () => void;
   onRemoveDrop: (id: string) => void;
 }
 
 export default function RemindersCard({
-  settings, onChange, hydrationRemaining, dropsRemaining, hydrationCount, dropsCount,
-  dropEvents, onLogDrop, onRemoveDrop,
+  settings, onChange, hydrationRemaining, dropsRemaining, blinkRemaining,
+  hydrationCount, dropsCount, blinkCount, dropEvents, onLogDrop, onRemoveDrop,
 }: RemindersCardProps) {
   return (
     <div className="card">
       <div className="reminders-header"><h2>Reminders</h2></div>
+
+      <div className="reminder-row">
+        <span className="reminder-icon">😌</span>
+        <div className="reminder-info">
+          <p className="title">Blink</p>
+          <p className="status">
+            {settings.blinkEnabled ? `Next in ${fmtLongClock(blinkRemaining)}` : 'Paused'} · {blinkCount} today
+          </p>
+        </div>
+        <div className="reminder-controls">
+          <input
+            type="number" min={3} max={30} value={settings.blinkMinutes}
+            onChange={(e) => onChange({ blinkMinutes: parseInt(e.target.value) || 10 })}
+          />
+          <span className="unit">min</span>
+          <label className="switch">
+            <input
+              type="checkbox" checked={settings.blinkEnabled}
+              onChange={(e) => onChange({ blinkEnabled: e.target.checked })}
+            />
+            <span className="switch-track" />
+          </label>
+        </div>
+      </div>
 
       <div className="reminder-row">
         <span className="reminder-icon">💧</span>

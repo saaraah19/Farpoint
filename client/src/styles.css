@@ -250,6 +250,21 @@
   .log-banner.show{ display:flex; }
   .log-banner span{ color:var(--text); }
 
+  .away-banner{
+    width:100%;
+    background:var(--near-dim);
+    border:1px solid var(--near);
+    border-radius:12px;
+    padding:12px 14px;
+    font-size:13px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    flex-wrap:wrap;
+  }
+  .away-banner span{ color:var(--text); }
+
   details{
     background:var(--surface);
     border:1px solid var(--line);
@@ -567,6 +582,18 @@
   .modal-actions{ display:flex; justify-content:flex-end; gap:10px; }
 
   /* Compliance heatmap */
+  .streak-badge{
+    display:inline-block;
+    font-family:var(--font-display);
+    font-weight:600;
+    font-size:15px;
+    color:var(--near);
+    background:var(--near-dim);
+    border:1px solid var(--near);
+    border-radius:999px;
+    padding:6px 14px;
+    margin:0 0 12px;
+  }
   .heatmap-grid{
     display:flex;
     flex-wrap:wrap;

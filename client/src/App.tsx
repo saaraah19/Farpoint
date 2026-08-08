@@ -12,6 +12,7 @@ import CatMascot from './components/CatMascot';
 import ExportCard from './components/ExportCard';
 import ComplianceHeatmap from './components/ComplianceHeatmap';
 import AdaptiveSuggestion from './components/AdaptiveSuggestion';
+import PushSettingsCard from './components/PushSettingsCard';
 import { usePomodoro } from './hooks/usePomodoro';
 import { useDailyStats } from './hooks/useDailyStats';
 import { useHistory } from './hooks/useHistory';
@@ -20,6 +21,8 @@ import { useReminderTimers } from './hooks/useReminderTimers';
 import { useEventLog } from './hooks/useEventLog';
 import { useDailyHistory } from './hooks/useDailyHistory';
 import { usePurrAmbient } from './hooks/usePurrAmbient';
+import { usePushNotifications } from './hooks/usePushNotifications';
+import { usePushScheduleSync } from './hooks/usePushScheduleSync';
 import { playCelebration } from './sound';
 import { notify } from './notifications';
 import { DRILL_GOAL_SESSIONS } from './hooks/useDrill';
@@ -49,6 +52,8 @@ export default function App() {
 
   usePurrAmbient(pomodoroSettings.purrEnabled && pomodoro.running && pomodoro.phase === 'work');
 
+  const push = usePushNotifications();
+
   const reminders = useReminderTimers({
     settings: reminderSettings,
     notificationsEnabled: pomodoroSettings.notificationsEnabled,
@@ -57,6 +62,18 @@ export default function App() {
       updateStats({ dropsCount: stats.dropsCount + 1 });
       dropsLog.add();
     },
+    onBlinkDone: () => updateStats({ blinkCount: stats.blinkCount + 1 }),
+  });
+
+  usePushScheduleSync({
+    enabled: push.subscribed,
+    pomodoroRunning: pomodoro.running,
+    pomodoroPhase: pomodoro.phase,
+    pomodoroRemaining: pomodoro.remaining,
+    reminderSettings,
+    hydrationRemaining: reminders.hydrationRemaining,
+    dropsRemaining: reminders.dropsRemaining,
+    blinkRemaining: reminders.blinkRemaining,
   });
 
   function fireCelebration(title: string, body: string) {
@@ -161,11 +178,13 @@ export default function App() {
         cyclesToday={stats.cyclesToday}
         targetSessions={stats.targetSessions}
         zenMode={zenMode}
+        awayMinutes={pomodoro.awayMinutes}
         onToggle={pomodoro.toggleRunning}
         onSkip={pomodoro.skip}
         onReset={pomodoro.reset}
         onLogSession={() => setModalOpen(true)}
         onToggleZen={() => setZenMode((z) => !z)}
+        onDismissAway={pomodoro.dismissAwayNotice}
       />
 
       {!zenMode && (
@@ -179,6 +198,8 @@ export default function App() {
 
           <TimingSettings settings={pomodoroSettings} onChange={updatePomodoroSettings} />
 
+          <PushSettingsCard />
+
           <DrillCard
             drillSessionsToday={stats.drillSessionsToday}
             onSessionComplete={handleDrillSessionComplete}
@@ -189,8 +210,10 @@ export default function App() {
             onChange={updateReminderSettings}
             hydrationRemaining={reminders.hydrationRemaining}
             dropsRemaining={reminders.dropsRemaining}
+            blinkRemaining={reminders.blinkRemaining}
             hydrationCount={stats.hydrationCount}
             dropsCount={stats.dropsCount}
+            blinkCount={stats.blinkCount}
             dropEvents={dropsLog.events}
             onLogDrop={handleLogDropNow}
             onRemoveDrop={dropsLog.remove}

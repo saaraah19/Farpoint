@@ -12,6 +12,7 @@
     "better-sqlite3": "^11.3.0",
     "cors": "^2.8.5",
     "express": "^4.19.2",
-    "farpoint": "file:.."
+    "farpoint": "file:..",
+    "web-push": "^3.6.7"
   }
 }

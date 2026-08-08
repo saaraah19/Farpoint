@@ -21,7 +21,8 @@ db.exec(`
     hydration_count INTEGER NOT NULL DEFAULT 0,
     drops_count INTEGER NOT NULL DEFAULT 0,
     current_task TEXT NOT NULL DEFAULT '',
-    target_sessions INTEGER NOT NULL DEFAULT 0
+    target_sessions INTEGER NOT NULL DEFAULT 0,
+    blink_count INTEGER NOT NULL DEFAULT 0
   );
 
   CREATE TABLE IF NOT EXISTS history (
@@ -39,7 +40,9 @@ db.exec(`
     hydration_enabled INTEGER NOT NULL DEFAULT 1,
     hydration_minutes INTEGER NOT NULL DEFAULT 45,
     drops_enabled INTEGER NOT NULL DEFAULT 1,
-    drops_minutes INTEGER NOT NULL DEFAULT 120
+    drops_minutes INTEGER NOT NULL DEFAULT 120,
+    blink_enabled INTEGER NOT NULL DEFAULT 1,
+    blink_minutes INTEGER NOT NULL DEFAULT 10
   );
 
   CREATE TABLE IF NOT EXISTS pomodoro_settings (
@@ -51,13 +54,34 @@ db.exec(`
     sound_enabled INTEGER NOT NULL DEFAULT 1,
     sound_style TEXT NOT NULL DEFAULT 'chime',
     notifications_enabled INTEGER NOT NULL DEFAULT 0,
-    purr_enabled INTEGER NOT NULL DEFAULT 0
+    purr_enabled INTEGER NOT NULL DEFAULT 0,
+    afk_pause_enabled INTEGER NOT NULL DEFAULT 1
   );
 
   CREATE TABLE IF NOT EXISTS event_log (
     id TEXT PRIMARY KEY,
     ts INTEGER NOT NULL,
     kind TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS vapid_keys (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    public_key TEXT NOT NULL,
+    private_key TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS push_subscriptions (
+    endpoint TEXT PRIMARY KEY,
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS scheduled_push (
+    kind TEXT PRIMARY KEY,
+    fire_at INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL
   );
 `);
 
@@ -73,10 +97,14 @@ function ensureColumn(table, column, ddl) {
 }
 ensureColumn('daily_stats', 'current_task', `current_task TEXT NOT NULL DEFAULT ''`);
 ensureColumn('daily_stats', 'target_sessions', `target_sessions INTEGER NOT NULL DEFAULT 0`);
+ensureColumn('daily_stats', 'blink_count', `blink_count INTEGER NOT NULL DEFAULT 0`);
 ensureColumn('history', 'task', `task TEXT NOT NULL DEFAULT ''`);
 ensureColumn('pomodoro_settings', 'sound_style', `sound_style TEXT NOT NULL DEFAULT 'chime'`);
 ensureColumn('pomodoro_settings', 'notifications_enabled', `notifications_enabled INTEGER NOT NULL DEFAULT 0`);
 ensureColumn('pomodoro_settings', 'purr_enabled', `purr_enabled INTEGER NOT NULL DEFAULT 0`);
+ensureColumn('pomodoro_settings', 'afk_pause_enabled', `afk_pause_enabled INTEGER NOT NULL DEFAULT 1`);
+ensureColumn('reminder_settings', 'blink_enabled', `blink_enabled INTEGER NOT NULL DEFAULT 1`);
+ensureColumn('reminder_settings', 'blink_minutes', `blink_minutes INTEGER NOT NULL DEFAULT 10`);
 
 // Seed singleton settings rows if empty.
 db.prepare(`INSERT OR IGNORE INTO reminder_settings (id) VALUES (1)`).run();

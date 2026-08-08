@@ -10,6 +10,7 @@ export interface DailyStats {
   dropsCount: number;
   currentTask: string;
   targetSessions: number;
+  blinkCount: number;
 }
 
 export interface HistoryEntry {
@@ -35,6 +36,8 @@ export interface ReminderSettings {
   hydrationMinutes: number;
   dropsEnabled: boolean;
   dropsMinutes: number;
+  blinkEnabled: boolean;
+  blinkMinutes: number;
 }
 
 export interface PomodoroSettings {
@@ -46,4 +49,5 @@ export interface PomodoroSettings {
   soundStyle: SoundStyle;
   notificationsEnabled: boolean;
   purrEnabled: boolean;
+  afkPauseEnabled: boolean;
 }

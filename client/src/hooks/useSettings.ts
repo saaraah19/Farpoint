@@ -7,6 +7,8 @@ const DEFAULT_REMINDERS: ReminderSettings = {
   hydrationMinutes: 45,
   dropsEnabled: true,
   dropsMinutes: 120,
+  blinkEnabled: true,
+  blinkMinutes: 10,
 };
 
 const DEFAULT_POMODORO: PomodoroSettings = {
@@ -18,6 +20,7 @@ const DEFAULT_POMODORO: PomodoroSettings = {
   soundStyle: 'chime',
   notificationsEnabled: false,
   purrEnabled: false,
+  afkPauseEnabled: true,
 };
 
 export function useReminderSettings() {
